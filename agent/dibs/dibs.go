@@ -1,11 +1,16 @@
 package dibs
 
-import "regexp"
+import (
+	"regexp"
+)
 
 const (
 	overrideFileName      = "override_file"
 	globalBucketName      = "global"
 	beServicesPrefixRegex = `be\/services`
+	uatBucketName         = "uat"
+	liveBucketPrefix      = "live_"
+	uatBucketPrefix       = "uat_"
 )
 
 func GetAllConfigBuckets(configBucket string, schema map[string]map[string]interface{}, isLocal bool) ([]string, error) {
@@ -14,19 +19,23 @@ func GetAllConfigBuckets(configBucket string, schema map[string]map[string]inter
 	var currentBucket = configBucket
 
 	for currentBucket != globalBucketName {
-		schemaEntry := schema[currentBucket]
-		parents := schemaEntry["parents"].([]interface{})
-		parent := parents[0].(string)
+		if currentBucket == uatBucketName {
+			currentBucket = liveBucketPrefix + configBucket[len(uatBucketPrefix):]
+		} else {
+			schemaEntry := schema[currentBucket]
+			parents := schemaEntry["parents"].([]interface{})
+			parent := parents[0].(string)
 
-		allConfigBuckets = append(allConfigBuckets, parent)
+			currentBucket = parent
+		}
 
-		currentBucket = parent
+		allConfigBuckets = append(allConfigBuckets, currentBucket)
 	}
 
 	return allConfigBuckets, nil
 }
 
-func GetConfigs(buckets []string, configs map[string]string) (interface{}, error) {
+func GetConfigs(buckets []string, configs map[string]string) (map[string]string, error) {
 	configsByFileName := make(map[string]string)
 
 	for i := len(buckets) - 1; i >= 0; i = i - 1 {

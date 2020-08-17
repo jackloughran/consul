@@ -16,7 +16,8 @@ const (
 )
 
 type DibsConfigsResponse struct {
-	Name string `json:"name"`
+	Buckets []string
+	Configs map[string]string
 }
 
 func (s *HTTPServer) DibsConfigs(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
@@ -64,7 +65,10 @@ func (s *HTTPServer) DibsConfigs(resp http.ResponseWriter, req *http.Request) (i
 	// 	return nil, err
 	// }
 
-	return configs, nil
+	return DibsConfigsResponse{
+		Buckets: buckets,
+		Configs: configs,
+	}, nil
 }
 
 func (s *HTTPServer) getValue(key string) (string, error) {
