@@ -11,10 +11,18 @@ const (
 	uatBucketName         = "uat"
 	liveBucketPrefix      = "live_"
 	uatBucketPrefix       = "uat_"
+	localBucketName       = "local"
 )
 
-func GetAllConfigBuckets(configBucket string, schema map[string]map[string]interface{}, isLocal bool) ([]string, error) {
-	allConfigBuckets := []string{configBucket}
+func GetAllConfigBuckets(configBucket string, schema map[string]map[string]interface{}, service string, isLocal bool) ([]string, error) {
+	var allConfigBuckets []string
+	if isLocal {
+		allConfigBuckets = []string{localBucketName}
+	} else {
+		allConfigBuckets = []string{}
+	}
+
+	allConfigBuckets = addConfigBucket(configBucket, service, allConfigBuckets)
 
 	var currentBucket = configBucket
 
@@ -29,10 +37,14 @@ func GetAllConfigBuckets(configBucket string, schema map[string]map[string]inter
 			currentBucket = parent
 		}
 
-		allConfigBuckets = append(allConfigBuckets, currentBucket)
+		allConfigBuckets = addConfigBucket(currentBucket, service, allConfigBuckets)
 	}
 
 	return allConfigBuckets, nil
+}
+
+func addConfigBucket(bucket, service string, allConfigBuckets []string) []string {
+	return append(allConfigBuckets, bucket+"#"+service, bucket)
 }
 
 func GetConfigs(buckets []string, configs map[string]string) (map[string]string, error) {

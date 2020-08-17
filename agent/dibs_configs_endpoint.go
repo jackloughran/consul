@@ -26,6 +26,11 @@ func (s *HTTPServer) DibsConfigs(resp http.ResponseWriter, req *http.Request) (i
 		return nil, fmt.Errorf("must pass configBucket param")
 	}
 
+	service := req.URL.Query().Get("service")
+	if service == "" {
+		return nil, fmt.Errorf("must pass service param")
+	}
+
 	isLocal := req.URL.Query().Get("local") == "true"
 
 	currentVersion, err := s.getValue(currentVersionKey)
@@ -41,7 +46,7 @@ func (s *HTTPServer) DibsConfigs(resp http.ResponseWriter, req *http.Request) (i
 	var schema map[string]map[string]interface{}
 	json.Unmarshal([]byte(schemaJSON), &schema)
 
-	buckets, err := dibs.GetAllConfigBuckets(configBucket, schema, isLocal)
+	buckets, err := dibs.GetAllConfigBuckets(configBucket, schema, service, isLocal)
 	if err != nil {
 		return nil, err
 	}
