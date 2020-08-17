@@ -32,15 +32,25 @@ func (s *HTTPServer) DibsConfigs(resp http.ResponseWriter, req *http.Request) (i
 		return nil, err
 	}
 
-	schemaJson, err := s.getValue(beServicesPrefix + "/" + currentVersion + "/" + schemaFileName)
+	schemaJSON, err := s.getValue(beServicesPrefix + "/" + currentVersion + "/" + schemaFileName)
 	if err != nil {
 		return nil, err
 	}
 
 	var schema map[string]map[string]interface{}
-	json.Unmarshal([]byte(schemaJson), &schema)
+	json.Unmarshal([]byte(schemaJSON), &schema)
 
 	buckets, err := dibs.GetAllConfigBuckets(configBucket, schema, isLocal)
+	if err != nil {
+		return nil, err
+	}
+
+	allConfigs, err := s.getValues(beServicesPrefix + "/" + currentVersion + "/")
+	if err != nil {
+		return nil, err
+	}
+
+	configs, err := dibs.GetConfigs(buckets, allConfigs)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +64,7 @@ func (s *HTTPServer) DibsConfigs(resp http.ResponseWriter, req *http.Request) (i
 	// 	return nil, err
 	// }
 
-	return buckets, nil
+	return configs, nil
 }
 
 func (s *HTTPServer) getValue(key string) (string, error) {
@@ -69,4 +79,23 @@ func (s *HTTPServer) getValue(key string) (string, error) {
 	}
 
 	return string(out.Entries[0].Value), nil
+}
+
+func (s *HTTPServer) getValues(prefix string) (map[string]string, error) {
+	args := structs.KeyRequest{
+		Datacenter: "dibs-consul",
+		Key:        prefix,
+	}
+
+	var out structs.IndexedDirEntries
+	if err := s.agent.RPC("KVS.List", &args, &out); err != nil {
+		return nil, err
+	}
+
+	values := make(map[string]string)
+	for _, entry := range out.Entries {
+		values[entry.Key] = string(entry.Value)
+	}
+
+	return values, nil
 }

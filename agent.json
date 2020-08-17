@@ -1,5 +1,6 @@
 {
   "bind_addr": "",
+  "ui": true,
   "datacenter": "dibs-consul",
   "data_dir": "/Users/jack.loughran/git/consul/data",
   "encrypt": "I3AzT7b+RNX0VxU9WtgaRA==",
