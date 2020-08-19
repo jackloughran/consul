@@ -23,7 +23,7 @@ const (
 	requestTypeSingleConfigFile
 )
 
-var configsCache = make(map[string]map[string]string)
+var configsCache = make(map[string]map[string]map[string]string)
 
 const maxCachedConfigs = 3
 
@@ -78,7 +78,7 @@ func (s *HTTPServer) doDibsConfigs(resp http.ResponseWriter, req *http.Request, 
 		return nil, err
 	}
 
-	configs, err := s.getConfigs(currentVersion, buckets)
+	configs, err := s.getConfigs(currentVersion, service, buckets)
 	if err != nil {
 		return nil, err
 	}
@@ -123,10 +123,14 @@ func (s *HTTPServer) getSchema(currentVersion string) (map[string]map[string]int
 	return schema, nil
 }
 
-func (s *HTTPServer) getConfigs(currentVersion string, buckets []string) (map[string]string, error) {
-	configs := configsCache[currentVersion]
+func (s *HTTPServer) getConfigs(currentVersion, service string, buckets []string) (map[string]string, error) {
+	configsByService := configsCache[currentVersion]
+	var configs map[string]string
+	if configsByService != nil {
+		configs = configsByService[service]
+	}
 
-	if configs == nil {
+	if configsByService == nil || configs == nil {
 		allConfigs, err := s.getValues(beServicesPrefix + "/" + currentVersion + "/")
 		if err != nil {
 			return nil, err
@@ -137,7 +141,11 @@ func (s *HTTPServer) getConfigs(currentVersion string, buckets []string) (map[st
 			return nil, err
 		}
 
-		configsCache[currentVersion] = configs
+		if configsCache[currentVersion] == nil {
+			configsCache[currentVersion] = make(map[string]map[string]string)
+		}
+
+		configsCache[currentVersion][service] = configs
 		configsCacheVersions = append(configsCacheVersions, currentVersion)
 		if len(configsCacheVersions) > maxCachedConfigs {
 			configsCacheVersions = configsCacheVersions[len(configsCacheVersions)-maxCachedConfigs:]
