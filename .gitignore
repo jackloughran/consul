@@ -27,3 +27,5 @@ website/npm-debug.log
 website/vendor
 .vscode
 data
+config.json
+testrun.sh
