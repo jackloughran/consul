@@ -15,12 +15,38 @@ const (
 	schemaFileName    = "schema.json"
 )
 
+type requestType int
+
+const (
+	requestTypeJsonConfigs = iota
+	requestTypeConfigFiles
+	requestTypeSingleConfigFile
+)
+
+var configsCache = make(map[string]map[string]string)
+
+const maxCachedConfigs = 3
+
+var configsCacheVersions []string
+
 type DibsConfigsResponse struct {
 	Buckets []string
 	Configs map[string]string
 }
 
-func (s *HTTPServer) DibsConfigs(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
+func (s *HTTPServer) DibsJsonConfigs(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
+	return s.doDibsConfigs(resp, req, requestTypeJsonConfigs)
+}
+
+func (s *HTTPServer) DibsConfigFiles(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
+	return s.doDibsConfigs(resp, req, requestTypeConfigFiles)
+}
+
+func (s *HTTPServer) DibsSingleConfigFile(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
+	return s.doDibsConfigs(resp, req, requestTypeSingleConfigFile)
+}
+
+func (s *HTTPServer) doDibsConfigs(resp http.ResponseWriter, req *http.Request, requestType requestType) (interface{}, error) {
 	configBucket := req.URL.Query().Get("configBucket")
 	if configBucket == "" {
 		return nil, fmt.Errorf("must pass configBucket param")
@@ -33,11 +59,59 @@ func (s *HTTPServer) DibsConfigs(resp http.ResponseWriter, req *http.Request) (i
 
 	isLocal := req.URL.Query().Get("local") == "true"
 
-	currentVersion, err := s.getValue(currentVersionKey)
+	currentVersion := req.URL.Query().Get("currentVersion")
+	if currentVersion == "" {
+		var err error
+		currentVersion, err = s.getValue(currentVersionKey)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	schema, err := s.getSchema(currentVersion)
 	if err != nil {
 		return nil, err
 	}
 
+	buckets, err := dibs.GetAllConfigBuckets(configBucket, schema, service, isLocal)
+	if err != nil {
+		return nil, err
+	}
+
+	configs, err := s.getConfigs(currentVersion, buckets)
+	if err != nil {
+		return nil, err
+	}
+
+	switch requestType {
+	case requestTypeJsonConfigs:
+		return DibsConfigsResponse{
+			Buckets: buckets,
+			Configs: configs,
+		}, nil
+
+	case requestTypeConfigFiles:
+		return dibs.GetConfigFileNames(configs), nil
+
+	case requestTypeSingleConfigFile:
+		fileName := req.URL.Query().Get("fileName")
+		if fileName == "" {
+			return nil, fmt.Errorf("must provide fileName query param")
+		}
+
+		s, err := dibs.GetSingleConfigFile(fileName, configs)
+		if err != nil {
+			return nil, err
+		}
+
+		fmt.Fprint(resp, s)
+		return nil, nil
+	}
+
+	return nil, fmt.Errorf("fell through switch somehow")
+}
+
+func (s *HTTPServer) getSchema(currentVersion string) (map[string]map[string]interface{}, error) {
 	schemaJSON, err := s.getValue(beServicesPrefix + "/" + currentVersion + "/" + schemaFileName)
 	if err != nil {
 		return nil, err
@@ -46,34 +120,31 @@ func (s *HTTPServer) DibsConfigs(resp http.ResponseWriter, req *http.Request) (i
 	var schema map[string]map[string]interface{}
 	json.Unmarshal([]byte(schemaJSON), &schema)
 
-	buckets, err := dibs.GetAllConfigBuckets(configBucket, schema, service, isLocal)
-	if err != nil {
-		return nil, err
+	return schema, nil
+}
+
+func (s *HTTPServer) getConfigs(currentVersion string, buckets []string) (map[string]string, error) {
+	configs := configsCache[currentVersion]
+
+	if configs == nil {
+		allConfigs, err := s.getValues(beServicesPrefix + "/" + currentVersion + "/")
+		if err != nil {
+			return nil, err
+		}
+
+		configs, err = dibs.GetConfigs(buckets, allConfigs)
+		if err != nil {
+			return nil, err
+		}
+
+		configsCache[currentVersion] = configs
+		configsCacheVersions = append(configsCacheVersions, currentVersion)
+		if len(configsCacheVersions) > maxCachedConfigs {
+			configsCacheVersions = configsCacheVersions[len(configsCacheVersions)-maxCachedConfigs:]
+		}
 	}
 
-	allConfigs, err := s.getValues(beServicesPrefix + "/" + currentVersion + "/")
-	if err != nil {
-		return nil, err
-	}
-
-	configs, err := dibs.GetConfigs(buckets, allConfigs)
-	if err != nil {
-		return nil, err
-	}
-
-	// args := structs.KeyListRequest{
-	// 	Datacenter: "dibs-consul",
-	// }
-
-	// var out structs.IndexedKeyList
-	// if err := s.agent.RPC("KVS.ListKeys", &args, &out); err != nil {
-	// 	return nil, err
-	// }
-
-	return DibsConfigsResponse{
-		Buckets: buckets,
-		Configs: configs,
-	}, nil
+	return configs, nil
 }
 
 func (s *HTTPServer) getValue(key string) (string, error) {

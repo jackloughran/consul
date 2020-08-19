@@ -1,7 +1,17 @@
+// Package dibs contains most of the actual logic around our configs.
+// Most services will probably request configs by filename. First, they get a list of
+// each file name. Then, they make separate requests for each file name. Those separate
+// requests must be made with the config version from consul. This is for two reasons:
+// 1) We don't want the configs to change half way through these file name requests and
+// the service to get some config files from one version and some from another. 2) We
+// don't want to have to refetch and reprocess the configs every time because it's a
+// pretty slow process. We will cache the latest 3 versions of processed configs.
 package dibs
 
 import (
+	"fmt"
 	"regexp"
+	"strings"
 )
 
 const (
@@ -12,6 +22,14 @@ const (
 	liveBucketPrefix      = "live_"
 	uatBucketPrefix       = "uat_"
 	localBucketName       = "local"
+	filePrefix            = "FILES/"
+)
+
+type configType int
+
+const (
+	configTypeProperties = iota
+	configTypeFile
 )
 
 func GetAllConfigBuckets(configBucket string, schema map[string]map[string]interface{}, service string, isLocal bool) ([]string, error) {
@@ -67,4 +85,58 @@ func GetConfigs(buckets []string, configs map[string]string) (map[string]string,
 	}
 
 	return configsByFileName, nil
+}
+
+func GetConfigFileNames(configsByFileName map[string]string) []string {
+	fileNamesSet := make(map[string]bool)
+	fileNamesSlice := make([]string, 0)
+
+	for fileNameAndKey := range configsByFileName {
+		fileName, _ := getFileName(fileNameAndKey)
+		if !fileNamesSet[fileName] {
+			fileNamesSet[fileName] = true
+			fileNamesSlice = append(fileNamesSlice, fileName)
+		}
+	}
+
+	return fileNamesSlice
+}
+
+func getFileName(fileNameAndKey string) (string, configType) {
+	if strings.HasPrefix(fileNameAndKey, filePrefix) {
+		return fileNameAndKey[len(filePrefix):], configTypeFile
+	}
+
+	return strings.Split(fileNameAndKey, "#")[0], configTypeProperties
+}
+
+func GetSingleConfigFile(fileName string, configsByFileName map[string]string) (string, error) {
+	configsForThisFile := make(map[string]string)
+
+	for fileNameAndKey, value := range configsByFileName {
+		thisFileName, configType := getFileName(fileNameAndKey)
+
+		if thisFileName == fileName {
+			if configType == configTypeProperties {
+				configsForThisFile[getConfigKey(fileNameAndKey)] = value
+			} else {
+				return value, nil
+			}
+		}
+	}
+
+	var b strings.Builder
+	for key, value := range configsForThisFile {
+		fmt.Fprintf(&b, "%s=%s\n", key, value)
+	}
+
+	return b.String(), nil
+}
+
+func getConfigKey(fileNameAndKey string) string {
+	if strings.Contains(fileNameAndKey, "#") {
+		return strings.Split(fileNameAndKey, "#")[1]
+	}
+
+	return fileNameAndKey
 }
