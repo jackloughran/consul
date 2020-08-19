@@ -34,6 +34,11 @@ type DibsConfigsResponse struct {
 	Configs map[string]string
 }
 
+type DibsConfigFilesResponse struct {
+	FileNames      []string
+	CurrentVersion string
+}
+
 func (s *HTTPServer) DibsJsonConfigs(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
 	return s.doDibsConfigs(resp, req, requestTypeJsonConfigs)
 }
@@ -61,6 +66,10 @@ func (s *HTTPServer) doDibsConfigs(resp http.ResponseWriter, req *http.Request, 
 
 	currentVersion := req.URL.Query().Get("currentVersion")
 	if currentVersion == "" {
+		if requestType == requestTypeSingleConfigFile {
+			return nil, fmt.Errorf("must pass currentVersion param")
+		}
+
 		var err error
 		currentVersion, err = s.getValue(currentVersionKey)
 		if err != nil {
@@ -91,7 +100,10 @@ func (s *HTTPServer) doDibsConfigs(resp http.ResponseWriter, req *http.Request, 
 		}, nil
 
 	case requestTypeConfigFiles:
-		return dibs.GetConfigFileNames(configs), nil
+		return DibsConfigFilesResponse{
+			FileNames:      dibs.GetConfigFileNames(configs),
+			CurrentVersion: currentVersion,
+		}, nil
 
 	case requestTypeSingleConfigFile:
 		fileName := req.URL.Query().Get("fileName")
@@ -102,6 +114,10 @@ func (s *HTTPServer) doDibsConfigs(resp http.ResponseWriter, req *http.Request, 
 		s, err := dibs.GetSingleConfigFile(fileName, configs)
 		if err != nil {
 			return nil, err
+		}
+
+		if s == "" {
+			resp.WriteHeader(http.StatusNotFound)
 		}
 
 		fmt.Fprint(resp, s)
