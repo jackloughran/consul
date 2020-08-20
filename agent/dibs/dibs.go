@@ -101,14 +101,6 @@ func GetConfigFileNames(configsByFileName map[string]string) []string {
 	return fileNamesSlice
 }
 
-func getFileName(fileNameAndKey string) (string, configType) {
-	if strings.HasPrefix(fileNameAndKey, filePrefix) {
-		return fileNameAndKey[len(filePrefix):], configTypeFile
-	}
-
-	return strings.Split(fileNameAndKey, "#")[0], configTypeProperties
-}
-
 func GetSingleConfigFile(fileName string, configsByFileName map[string]string) (string, error) {
 	configsForThisFile := make(map[string]string)
 
@@ -130,6 +122,38 @@ func GetSingleConfigFile(fileName string, configsByFileName map[string]string) (
 	}
 
 	return b.String(), nil
+}
+
+func GroupConfigs(configs map[string]string) map[string]interface{} {
+	result := make(map[string]interface{})
+	for k, v := range configs {
+		fileName, configType := getFileName(k)
+		if configType == configTypeProperties {
+			var configFileEntry map[string]string
+			if result[fileName] != nil {
+				configFileEntry = result[fileName].(map[string]string)
+			} else {
+				configFileEntry = make(map[string]string)
+			}
+
+			configKey := getConfigKey(k)
+
+			configFileEntry[configKey] = v
+			result[fileName] = configFileEntry
+		} else {
+			result[fileName] = v
+		}
+	}
+
+	return result
+}
+
+func getFileName(fileNameAndKey string) (string, configType) {
+	if strings.HasPrefix(fileNameAndKey, filePrefix) {
+		return fileNameAndKey[len(filePrefix):], configTypeFile
+	}
+
+	return strings.Split(fileNameAndKey, "#")[0], configTypeProperties
 }
 
 func getConfigKey(fileNameAndKey string) string {

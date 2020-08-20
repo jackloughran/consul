@@ -31,7 +31,7 @@ var configsCacheVersions []string
 
 type DibsConfigsResponse struct {
 	Buckets []string
-	Configs map[string]string
+	Configs map[string]interface{}
 }
 
 type DibsConfigFilesResponse struct {
@@ -96,7 +96,7 @@ func (s *HTTPServer) doDibsConfigs(resp http.ResponseWriter, req *http.Request, 
 	case requestTypeJsonConfigs:
 		return DibsConfigsResponse{
 			Buckets: buckets,
-			Configs: configs,
+			Configs: dibs.GroupConfigs(configs),
 		}, nil
 
 	case requestTypeConfigFiles:
