@@ -1,10 +1,3 @@
-// Package dibs contains most of the actual logic around our configs.
-// Most services will probably request configs by filename. First, they get a list of
-// each file name. Then, they make separate requests for each file name. Those separate
-// requests must be made with the config version from consul. We don't want the configs
-// to change half way through these file name requests and the service to get some
-// config files from one version and some from another. We will cache the latest 3
-// versions of processed configs in the calling package.
 package dibs
 
 import (
