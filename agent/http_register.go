@@ -122,5 +122,4 @@ func init() {
 	registerEndpoint("/v1/txn", []string{"PUT"}, (*HTTPServer).Txn)
 	registerEndpoint("/v1/dibsconfigs", []string{"GET"}, (*HTTPServer).DibsJsonConfigs)
 	registerEndpoint("/v1/dibsconfigfiles", []string{"GET"}, (*HTTPServer).DibsConfigFiles)
-	registerEndpoint("/v1/dibssingleconfigfile", []string{"GET"}, (*HTTPServer).DibsSingleConfigFile)
 }

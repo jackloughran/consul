@@ -8,6 +8,7 @@
 package dibs
 
 import (
+	"encoding/base64"
 	"fmt"
 	"regexp"
 	"strings"
@@ -86,22 +87,30 @@ func GetConfigs(buckets []string, configs map[string]string) (map[string]string,
 	return configsByFileName, nil
 }
 
-func GetConfigFileNames(configsByFileName map[string]string) []string {
+func GetBase64ConfigFiles(configsByFileName map[string]string) (map[string]string, error) {
 	fileNamesSet := make(map[string]bool)
-	fileNamesSlice := make([]string, 0)
 
 	for fileNameAndKey := range configsByFileName {
 		fileName, _ := getFileName(fileNameAndKey)
 		if !fileNamesSet[fileName] {
 			fileNamesSet[fileName] = true
-			fileNamesSlice = append(fileNamesSlice, fileName)
 		}
 	}
 
-	return fileNamesSlice
+	files := make(map[string]string)
+	for fileName, _ := range fileNamesSet {
+		fileValue, err := getSingleConfigFile(fileName, configsByFileName)
+		if err != nil {
+			return nil, err
+		}
+
+		files[fileName] = base64.StdEncoding.EncodeToString([]byte(fileValue))
+	}
+
+	return files, nil
 }
 
-func GetSingleConfigFile(fileName string, configsByFileName map[string]string) (string, error) {
+func getSingleConfigFile(fileName string, configsByFileName map[string]string) (string, error) {
 	configsForThisFile := make(map[string]string)
 
 	for fileNameAndKey, value := range configsByFileName {

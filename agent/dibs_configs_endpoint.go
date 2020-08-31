@@ -20,7 +20,6 @@ type requestType int
 const (
 	requestTypeJsonConfigs = iota
 	requestTypeConfigFiles
-	requestTypeSingleConfigFile
 )
 
 var configsCache = make(map[string]map[string]map[string]string)
@@ -35,7 +34,7 @@ type DibsConfigsResponse struct {
 }
 
 type DibsConfigFilesResponse struct {
-	FileNames      []string
+	Files          map[string]string
 	CurrentVersion string
 }
 
@@ -45,10 +44,6 @@ func (s *HTTPServer) DibsJsonConfigs(resp http.ResponseWriter, req *http.Request
 
 func (s *HTTPServer) DibsConfigFiles(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
 	return s.doDibsConfigs(resp, req, requestTypeConfigFiles)
-}
-
-func (s *HTTPServer) DibsSingleConfigFile(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
-	return s.doDibsConfigs(resp, req, requestTypeSingleConfigFile)
 }
 
 func (s *HTTPServer) doDibsConfigs(resp http.ResponseWriter, req *http.Request, requestType requestType) (interface{}, error) {
@@ -64,17 +59,9 @@ func (s *HTTPServer) doDibsConfigs(resp http.ResponseWriter, req *http.Request, 
 
 	isLocal := req.URL.Query().Get("local") == "true"
 
-	currentVersion := req.URL.Query().Get("currentVersion")
-	if currentVersion == "" {
-		if requestType == requestTypeSingleConfigFile {
-			return nil, fmt.Errorf("must pass currentVersion param")
-		}
-
-		var err error
-		currentVersion, err = s.getValue(currentVersionKey)
-		if err != nil {
-			return nil, err
-		}
+	currentVersion, err := s.getValue(currentVersionKey)
+	if err != nil {
+		return nil, err
 	}
 
 	schema, err := s.getSchema(currentVersion)
@@ -100,28 +87,15 @@ func (s *HTTPServer) doDibsConfigs(resp http.ResponseWriter, req *http.Request, 
 		}, nil
 
 	case requestTypeConfigFiles:
-		return DibsConfigFilesResponse{
-			FileNames:      dibs.GetConfigFileNames(configs),
-			CurrentVersion: currentVersion,
-		}, nil
-
-	case requestTypeSingleConfigFile:
-		fileName := req.URL.Query().Get("fileName")
-		if fileName == "" {
-			return nil, fmt.Errorf("must provide fileName query param")
-		}
-
-		s, err := dibs.GetSingleConfigFile(fileName, configs)
+		files, err := dibs.GetBase64ConfigFiles(configs)
 		if err != nil {
 			return nil, err
 		}
 
-		if s == "" {
-			resp.WriteHeader(http.StatusNotFound)
-		}
-
-		fmt.Fprint(resp, s)
-		return nil, nil
+		return DibsConfigFilesResponse{
+			Files:          files,
+			CurrentVersion: currentVersion,
+		}, nil
 	}
 
 	return nil, fmt.Errorf("fell through switch somehow")
