@@ -15,18 +15,14 @@ const (
 	schemaFileName    = "schema.json"
 )
 
+var tokens = [...]string{"HOST_KEY"}
+
 type requestType int
 
 const (
 	requestTypeJsonConfigs = iota
 	requestTypeConfigFiles
 )
-
-var configsCache = make(map[string]map[string]map[string]string)
-
-const maxCachedConfigs = 3
-
-var configsCacheVersions []string
 
 type DibsConfigsResponse struct {
 	Buckets []string
@@ -74,7 +70,15 @@ func (s *HTTPServer) doDibsConfigs(resp http.ResponseWriter, req *http.Request, 
 		return nil, err
 	}
 
-	configs, err := s.getConfigs(currentVersion, service, buckets)
+	tokensWithValues := make(map[string]string)
+	for _, t := range tokens {
+		tokensWithValues[t] = req.URL.Query().Get(t)
+		if tokensWithValues[t] == "" {
+			return nil, fmt.Errorf("must pass %s param", t)
+		}
+	}
+
+	configs, err := s.getConfigs(currentVersion, service, buckets, tokensWithValues)
 	if err != nil {
 		return nil, err
 	}
@@ -113,33 +117,16 @@ func (s *HTTPServer) getSchema(currentVersion string) (map[string]map[string]int
 	return schema, nil
 }
 
-func (s *HTTPServer) getConfigs(currentVersion, service string, buckets []string) (map[string]string, error) {
-	configsByService := configsCache[currentVersion]
+func (s *HTTPServer) getConfigs(currentVersion, service string, buckets []string, tokensWithValues map[string]string) (map[string]string, error) {
 	var configs map[string]string
-	if configsByService != nil {
-		configs = configsByService[service]
+	allConfigs, err := s.getValues(beServicesPrefix + "/" + currentVersion + "/")
+	if err != nil {
+		return nil, err
 	}
 
-	if configsByService == nil || configs == nil {
-		allConfigs, err := s.getValues(beServicesPrefix + "/" + currentVersion + "/")
-		if err != nil {
-			return nil, err
-		}
-
-		configs, err = dibs.GetConfigs(buckets, allConfigs)
-		if err != nil {
-			return nil, err
-		}
-
-		if configsCache[currentVersion] == nil {
-			configsCache[currentVersion] = make(map[string]map[string]string)
-		}
-
-		configsCache[currentVersion][service] = configs
-		configsCacheVersions = append(configsCacheVersions, currentVersion)
-		if len(configsCacheVersions) > maxCachedConfigs {
-			configsCacheVersions = configsCacheVersions[len(configsCacheVersions)-maxCachedConfigs:]
-		}
+	configs, err = dibs.GetConfigs(buckets, allConfigs, tokensWithValues)
+	if err != nil {
+		return nil, err
 	}
 
 	return configs, nil

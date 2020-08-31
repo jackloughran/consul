@@ -65,7 +65,7 @@ func addConfigBucket(bucket, service string, allConfigBuckets []string) []string
 	return append(allConfigBuckets, bucket+"#"+service, bucket)
 }
 
-func GetConfigs(buckets []string, configs map[string]string) (map[string]string, error) {
+func GetConfigs(buckets []string, configs map[string]string, tokensWithValues map[string]string) (map[string]string, error) {
 	configsByFileName := make(map[string]string)
 
 	for i := len(buckets) - 1; i >= 0; i = i - 1 {
@@ -79,12 +79,22 @@ func GetConfigs(buckets []string, configs map[string]string) (map[string]string,
 		for k, v := range configs {
 			fileName := r.FindStringSubmatch(k)
 			if fileName != nil && fileName[1] != "" {
-				configsByFileName[fileName[1]] = v
+				configsByFileName[fileName[1]] = tokenizeConfigValue(v, tokensWithValues)
 			}
 		}
 	}
 
 	return configsByFileName, nil
+}
+
+func tokenizeConfigValue(configValue string, tokensWithValues map[string]string) string {
+	var newConfigValue = configValue
+	for k, v := range tokensWithValues {
+		tokenString := fmt.Sprintf("${%s}", k)
+		newConfigValue = strings.ReplaceAll(newConfigValue, tokenString, v)
+	}
+
+	return newConfigValue
 }
 
 func GetBase64ConfigFiles(configsByFileName map[string]string) (map[string]string, error) {
